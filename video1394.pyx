@@ -235,21 +235,25 @@ cdef class DC1394Camera(object):
         cdef char *orig_ptr = arr.data
         cdef np.dtype orig_dtype = arr.dtype
         arr.dtype = dtype
+        arr.strides[0] = frame.stride
         nparr.shape = (frame.size[1], frame.size[0])
 
         selectlist = [self.fileno]
-        while not self.stop_event:
-            rlist, wlist, xlist = select.select(selectlist, [], [], 1)
-            if len(rlist) == 0:
-                continue
+        try:
+            while not self.stop_event:
+                rlist, wlist, xlist = select.select(selectlist, [], [], 1)
+                if len(rlist) == 0:
+                    continue
 
-            err = dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_POLL, &frame)
-            if err != DC1394_SUCCESS:
-                continue
+                err = dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_POLL, &frame)
+                if err != DC1394_SUCCESS:
+                    continue
 
-            arr.data = <char *>frame.image
-            yield arr, frame.timestamp
-            dc1394_capture_enqueue(self.cam, frame)
+                arr.data = <char *>frame.image
+                yield arr, frame.timestamp
+                dc1394_capture_enqueue(self.cam, frame)
+        except:
+            pass
 
 
         arr.data = orig_ptr

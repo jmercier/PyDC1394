@@ -33,18 +33,17 @@ camera.resetBus()
 camera.mode = video1394.VIDEO_MODE_640x480_RGB8
 camera.framerate = video1394.FRAMERATE_15
 camera.print_info()
-camera.grabEvent.addObserver(test)
-camera.start()
-
-import gobject
-import signal
-gobject.threads_init()
-loop = gobject.MainLoop()
+gen = camera.setup()
+import time
 def onstop(*args):
-    loop.quit()
+    camera.setdown()
+    for f in gen:
+        print f
+    time.sleep(1)
 
+for f in gen:
+    test(*f)
+
+import signal
 signal.signal(signal.SIGINT, onstop)
-loop.run()
-print "Stopping Camera"
-camera.stop()
 
