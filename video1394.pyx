@@ -118,7 +118,6 @@ cdef inline int DC1394SafeCall(dc1394error_t error) except -1:
     if DC1394_SUCCESS != error:
         errstr = dc1394_error_get_string(error)
         raise DC1394Error(errstr)
-        return_value = -1
     return return_value
 
 
@@ -141,6 +140,7 @@ cdef class FrameObject(object):
     def __init__(self,interface):
         self.__array_interface__ = interface
 
+
 cdef class DC1394Context(object):
     """
     This object represent a DC1394 context which is needed for further calling
@@ -157,8 +157,9 @@ cdef class DC1394Context(object):
     def __get_number_of_devices__(self):
         cdef dc1394camera_list_t *camera_list
         DC1394SafeCall(dc1394_camera_enumerate(self.dc1394, &camera_list))
-
-        return camera_list.num
+        return_value = camera_list.num
+        dc1394_camera_free_list(camera_list)
+        return return_value
 
     numberOfDevices = property(__get_number_of_devices__)
 
@@ -174,33 +175,31 @@ cdef class DC1394Context(object):
 
     cpdef createCamera(self, unsigned int cid):
         cdef dict camdesc = self.enumerateCameras()[cid]
-        return  DC1394Camera(self, camdesc['guid'], unit = camdesc['unit'])
-
+        return  DC1394CameraThread(self, camdesc['guid'], unit = camdesc['unit'])
 
 
 cdef class DC1394Camera(object):
     cdef dc1394camera_t *cam
     cdef DC1394Context ctx
     cdef dict available_modes
-    cdef bint stop_event
-    cdef bint running
-    cdef object __grab_event__
-    cdef object __init_event__
-    cdef object __stop_event__
-    cdef object capture_loop
     cdef dict available_features
     cdef dict unavailable_features
+    cdef bint stop_event
+
+
 
     def __dealloc__(self):
         dc1394_camera_free(self.cam)
 
-    def __cinit__(self, DC1394Context ctx, uint64_t guid, int unit = -1):
 
+    def __cinit__(self, DC1394Context ctx, uint64_t guid, int unit = -1):
         self.ctx = ctx
         if unit != -1:
             self.cam = dc1394_camera_new_unit(ctx.dc1394, guid, unit)
         else:
             self.cam = dc1394_camera_new(ctx.dc1394, guid);
+        self.power = False
+        self.transmission = DC1394_OFF
         self.populate_capabilities()
 
         try:
@@ -212,34 +211,26 @@ cdef class DC1394Camera(object):
 
         self.populate_capabilities()
 
-        self.running = False
-        self.stop_event = False
-        self.__grab_event__ = events.Event()
-        self.__init_event__ = events.Event()
-        self.__stop_event__ = events.Event()
+    def setdown(self):
+        self.stop_event = True;
 
-    def start(self):
-        if (self.running):
-            raise RuntimeError("Camera Already Running")
+    def setup(self):
+        print ("Starting camera...")
         self.power = True
+        if self.transmission is DC1394_ON:
+            raise RuntimeError("Camera Already Running")
         self.stop_event = False
-        self.capture_loop = threading.Thread(target = self.run, name = "DC1394 capture loop")
-        self.capture_loop.start()
 
-    def run(self):
-        self.__init_event__()
         DC1394SafeCall(dc1394_capture_setup(self.cam, 10, DC1394_CAPTURE_FLAGS_DEFAULT))
         self.transmission = DC1394_ON
-        self.running = True
         cdef dc1394video_frame_t *frame
         cdef dc1394error_t err
 
-        selectlist = [self.fileno]
         dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_WAIT, &frame)
 
         dtype = DC1394NumpyColorCoding[frame.color_coding]
 
-        cdef np.ndarray[np.uint8_t, ndim=3, mode="c"] arr = np.ndarray(shape=(frame.size[1], frame.size[0], dtype.itemsize) , dtype=np.uint8 )
+        cdef np.ndarray arr = np.ndarray(shape=(frame.size[1], frame.size[0], dtype.itemsize) , dtype=np.uint8 )
         cdef object nparr = arr
         cdef char *orig_ptr = arr.data
         cdef np.dtype orig_dtype = arr.dtype
@@ -257,7 +248,7 @@ cdef class DC1394Camera(object):
                 continue
 
             arr.data = <char *>frame.image
-            self.__grab_event__(arr, frame.timestamp)
+            yield arr, frame.timestamp
             dc1394_capture_enqueue(self.cam, frame)
 
 
@@ -266,14 +257,9 @@ cdef class DC1394Camera(object):
 
         self.transmission = DC1394_OFF
         DC1394SafeCall(dc1394_capture_stop(self.cam))
-        self.running = False
-        self.__stop_event__()
-
-    def stop(self, join = True):
-        self.stop_event = True
-        if join:
-            self.capture_loop.join()
         self.power = False
+        print ("Stopping Camera")
+    
 
 
     cdef void populate_capabilities(self):
@@ -288,10 +274,7 @@ cdef class DC1394Camera(object):
         DC1394SafeCall(dc1394_video_get_supported_modes(self.cam, &modes))
         for m in [modes.modes[i] for i in xrange(modes.num)]:
             DC1394SafeCall(dc1394_video_get_supported_framerates (self.cam, m, &framerates))
-            fmlist = []
-            for j from 0 <= j < framerates.num:
-                fmlist.append(framerates.framerates[j])
-            self.available_modes[m] = fmlist
+            self.available_modes[m] = [framerates.framerates[j] for j in xrange(framerates.num)]
 
         cdef dc1394featureset_t featureset
         DC1394SafeCall(dc1394_feature_get_all(self.cam, &featureset))
@@ -319,12 +302,6 @@ cdef class DC1394Camera(object):
 
     def __repr__(self):
         return '<DC1394Camera vendor="%s" model="%s"/>' % (self.cam.vendor, self.cam.model)
-
-    # -------------------------------------------------------------------------
-
-    property grabEvent:
-        def __get__(self):
-            return self.__grab_event__
 
     # -------------------------------------------------------------------------
 
@@ -1140,6 +1117,45 @@ cdef class DC1394Camera(object):
 
     def resetToFactoryDefault(self):
         dc1394_camera_reset(self.cam)
+
+cdef class DC1394CameraThread(DC1394Camera):
+    cdef object __grab_event__
+    cdef object __init_event__
+    cdef object __stop_event__
+    cdef object capture_loop
+
+
+    def __cinit__(self, DC1394Context ctx, uint64_t guid, int unit = -1):
+        self.stop_event = False
+        self.__grab_event__ = events.Event()
+        self.__init_event__ = events.Event()
+        self.__stop_event__ = events.Event()
+
+    def start(self):
+        self.capture_loop = threading.Thread(target = self.run, name = "DC1394 capture loop")
+        self.capture_loop.start()
+
+    # -------------------------------------------------------------------------
+
+    property grabEvent:
+        def __get__(self):
+            return self.__grab_event__
+
+
+
+
+    def run(self):
+        gen = self.setup()
+        for f in self.setup():
+            self.__grab_event__(*f)
+
+    def stop(self, join = True):
+        self.stop_event = True
+        if join:
+            self.capture_loop.join()
+        self.power = False
+
+
 
 #
 # vim: filetype=pyrex
