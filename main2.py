@@ -10,19 +10,12 @@ import time
 import sys
 
 cv2.namedWindow("Meh")
-cv2.namedWindow("Meh2")
 
 i = 0
 def test(im, timestamp):
     global i
     sys.stderr.write("grab %d %d \r" % (i, timestamp))
     cv2.imshow("Meh", im )
-    cv2.waitKey(1)
-
-def test2(im, timestamp):
-    global i
-    sys.stderr.write("grab %d %d \r" % (i, timestamp))
-    cv2.imshow("Meh2", im )
     cv2.waitKey(1)
 
 def testc(event, posx, posy, flag, self):
@@ -38,8 +31,7 @@ for i in range(1,2):
     camera = ctx.createCamera(i)
     camera.resetBus()
     camera.set1394A()
-    camera.mode = video1394.VIDEO_MODE_640x480_MONO8
-    camera.framerate = video1394.FRAMERATE_60
+    camera.setFormat7(video1394.VIDEO_MODE_FORMAT7_0, (752, 480), video1394.COLOR_CODING_RAW8)
     camera.print_info()
     gen = camera.setup()
     gens.append(gen)

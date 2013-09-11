@@ -36,6 +36,18 @@ cdef dict color_coding = {
                            DC1394_COLOR_CODING_RAW16      : "RAW16" }
 
 
+COLOR_CODING_MONO8      = DC1394_COLOR_CODING_MONO8
+COLOR_CODING_YUV411     = DC1394_COLOR_CODING_YUV411
+COLOR_CODING_YUV422     = DC1394_COLOR_CODING_YUV422
+COLOR_CODING_YUV444     = DC1394_COLOR_CODING_YUV444
+COLOR_CODING_RGB8       = DC1394_COLOR_CODING_RGB8
+COLOR_CODING_MONO16     = DC1394_COLOR_CODING_MONO16
+COLOR_CODING_RGB16      = DC1394_COLOR_CODING_RGB16
+COLOR_CODING_MONO16S    = DC1394_COLOR_CODING_MONO16S
+COLOR_CODING_RGB16S     = DC1394_COLOR_CODING_RGB16S
+COLOR_CODING_RAW8       = DC1394_COLOR_CODING_RAW8
+COLOR_CODING_RAW16      = DC1394_COLOR_CODING_RAW16
+
 VIDEO_MODE_1600x1200_RGB8       = DC1394_VIDEO_MODE_1600x1200_RGB8
 VIDEO_MODE_1280x960_RGB8        = DC1394_VIDEO_MODE_1280x960_RGB8
 VIDEO_MODE_1024x768_RGB8        = DC1394_VIDEO_MODE_1024x768_RGB8
@@ -227,6 +239,20 @@ cdef class DC1394Camera(object):
     def setdown(self):
         self.stop_event = True;
 
+    def setFormat7(self, int num, tuple size, int coding):
+        cdef dc1394video_mode_t mode = <dc1394video_mode_t>num
+        cdef dc1394color_coding_t color = <dc1394color_coding_t>coding
+        DC1394SafeCall(dc1394_format7_set_image_size(self.cam, mode, size[0], size[1]))
+        DC1394SafeCall(dc1394_format7_set_image_position(self.cam, mode, 0, 0))
+        DC1394SafeCall(dc1394_format7_set_color_coding(self.cam, mode, color))
+        cdef uint32_t packet_size
+        self.mode = mode
+        DC1394SafeCall(dc1394_format7_get_recommended_packet_size(self.cam, mode, &packet_size))
+        print "Packet Size", packet_size
+        DC1394SafeCall(dc1394_format7_get_packet_size(self.cam, mode, &packet_size))
+        print "Packet Size", packet_size
+
+
     def setup(self, unsigned int nbuffers = 10):
         print ("Starting camera...")
         self.power = True
@@ -263,6 +289,12 @@ cdef class DC1394Camera(object):
                     continue
 
                 arr.data = <char *>frame.image
+                print arr.strides[0], arr.strides[1], arr.strides[2]
+                print arr.shape[0], arr.shape[1]
+                print frame.size[0], frame.size[1], frame.stride, frame.total_bytes
+                if frame.size[0] * frame.size[1] > frame.total_bytes:
+                    print "Something went wrong"
+                    raise RuntimeError("Something went terribly wrong")
                 yield arr, frame.timestamp
                 dc1394_capture_enqueue(self.cam, frame)
         except:
@@ -298,13 +330,13 @@ cdef class DC1394Camera(object):
 
         cdef unsigned int h_size, v_size
         cdef float interval
+        cdef dc1394format7mode_t info
         for m in range(DC1394_VIDEO_MODE_FORMAT7_0, DC1394_VIDEO_MODE_FORMAT7_7):
-            dc1394_format7_get_max_image_size(self.cam, m, &h_size, &v_size)
-            print v_size, h_size
-            dc1394_format7_get_unit_size(self.cam, m, &h_size, &v_size)
-            print v_size, h_size
-            dc1394_format7_get_frame_interval(self.cam, m, &interval)
-            print interval
+            dc1394_format7_get_mode_info(self.cam, m, &info)
+            print info.present, info.size_x, info.max_size_x, info.size_y,info.max_size_y, info.total_bytes
+            for i in xrange(info.color_codings.num):
+                print color_coding[info.color_codings.codings[i]]
+
 
         cdef dc1394featureset_t featureset
         DC1394SafeCall(dc1394_feature_get_all(self.cam, &featureset))

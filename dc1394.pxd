@@ -50,6 +50,26 @@ cdef extern from "dc1394/dc1394.h":
         DC1394_BASLER_CORRUPTED_SFF_CHUNK
         DC1394_BASLER_UNKNOWN_SFF_CHUNK
 
+    ctypedef enum dc1394color_coding_t:
+        DC1394_COLOR_CODING_MONO8
+        DC1394_COLOR_CODING_YUV411
+        DC1394_COLOR_CODING_YUV422
+        DC1394_COLOR_CODING_YUV444
+        DC1394_COLOR_CODING_RGB8
+        DC1394_COLOR_CODING_MONO16
+        DC1394_COLOR_CODING_RGB16
+        DC1394_COLOR_CODING_MONO16S
+        DC1394_COLOR_CODING_RGB16S
+        DC1394_COLOR_CODING_RAW8
+        DC1394_COLOR_CODING_RAW16
+
+    ctypedef enum dc1394color_filter_t:
+        DC1394_COLOR_FILTER_RGGB
+        DC1394_COLOR_FILTER_GBRG
+        DC1394_COLOR_FILTER_GRBG
+        DC1394_COLOR_FILTER_BGGR
+        
+
     ctypedef enum dc1394operation_mode_t:
         DC1394_OPERATION_MODE_LEGACY
         DC1394_OPERATION_MODE_1394B
@@ -75,6 +95,7 @@ cdef extern from "dc1394/dc1394.h":
         DC1394_TRIGGER_MODE_NUM         "DC1394_TRIGGER_MODE_NUM"
         DC1394_FEATURE_NUM              "DC1394_FEATURE_NUM"
         DC1394_TRIGGER_SOURCE_NUM       "DC1394_TRIGGER_SOURCE_NUM"
+        DC1394_COLOR_CODING_NUM         "DC1394_COLOR_CODING_NUM"
 
     ctypedef enum dc1394video_mode_t:
         DC1394_VIDEO_MODE_160x120_YUV444
@@ -339,6 +360,31 @@ cdef extern from "dc1394/dc1394.h":
         uint32_t                num
         dc1394framerate_t       framerates[DC1394_FRAMERATE_NUM]
 
+    ctypedef struct dc1394color_codings_t:
+        uint32_t                num
+        dc1394color_coding_t    codings[DC1394_COLOR_CODING_NUM]
+
+    ctypedef struct dc1394format7mode_t:
+        dc1394bool_t            present
+        uint32_t                size_x
+        uint32_t                size_y
+        uint32_t                max_size_x
+        uint32_t                max_size_y
+        uint32_t                pos_x
+        uint32_t                pos_y
+        uint32_t                unit_size_x
+        uint32_t                unit_size_y
+        uint32_t                unit_pos_x
+        uint32_t                unit_pos_y
+        dc1394color_codings_t   color_codings
+        dc1394color_coding_t    color_coding
+        uint32_t                pixnum
+        uint32_t                packet_size
+        uint32_t                unit_packet_size
+        uint32_t                max_packet_size
+        uint64_t                total_bytes
+        dc1394color_filter_t    color_filter
+
 
     dc1394_t* dc1394_new () nogil
     void dc1394_free(dc1394_t *) nogil
@@ -429,7 +475,13 @@ cdef extern from "dc1394/dc1394.h":
     dc1394error_t dc1394_format7_set_image_position(dc1394camera_t *, dc1394video_mode_t, uint32_t, uint32_t) nogil
     dc1394error_t dc1394_format7_get_unit_position(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
     dc1394error_t dc1394_format7_get_frame_interval(dc1394camera_t *, dc1394video_mode_t, float *) nogil
-    dc1394error_t dc1394_format7_get_total_bytes(dc1394camera_t *, dc1394video_mode_t, unt64_t *) nogil
-    dc1394error_t dc1394_format7_get_pixel_number(dc1394camera_t *, dc1394video_mode_t, unt32_t *) nogil
+    dc1394error_t dc1394_format7_get_total_bytes(dc1394camera_t *, dc1394video_mode_t, uint64_t *) nogil
+    dc1394error_t dc1394_format7_get_pixel_number(dc1394camera_t *, dc1394video_mode_t, uint32_t *) nogil
     dc1394error_t dc1394_format7_set_roi(dc1394camera_t *, dc1394video_mode_t, int, int, int, int, int) nogil
     dc1394error_t dc1394_format7_get_roi(dc1394camera_t *, dc1394video_mode_t, int *, int *, int *, int *, int *) nogil
+    dc1394error_t dc1394_format7_set_color_coding(dc1394camera_t *, dc1394video_mode_t, dc1394color_coding_t) nogil
+    dc1394error_t dc1394_format7_get_recommended_packet_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *) nogil
+    dc1394error_t dc1394_format7_set_packet_size(dc1394camera_t *, dc1394video_mode_t, uint32_t) nogil
+    dc1394error_t dc1394_format7_get_packet_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *) nogil
+
+    dc1394error_t dc1394_format7_get_mode_info(dc1394camera_t *, dc1394video_mode_t, dc1394format7mode_t *info) nogil
