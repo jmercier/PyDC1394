@@ -420,3 +420,16 @@ cdef extern from "dc1394/dc1394.h":
 
     dc1394error_t dc1394_feature_get_value(dc1394camera_t *, dc1394feature_t, uint32_t *) nogil
     dc1394error_t dc1394_feature_set_value(dc1394camera_t *, dc1394feature_t, uint32_t) nogil
+
+    dc1394error_t dc1394_format7_get_max_image_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
+    dc1394error_t dc1394_format7_get_unit_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
+    dc1394error_t dc1394_format7_get_image_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
+    dc1394error_t dc1394_format7_set_image_size(dc1394camera_t *, dc1394video_mode_t, uint32_t, uint32_t) nogil
+    dc1394error_t dc1394_format7_get_image_position(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
+    dc1394error_t dc1394_format7_set_image_position(dc1394camera_t *, dc1394video_mode_t, uint32_t, uint32_t) nogil
+    dc1394error_t dc1394_format7_get_unit_position(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
+    dc1394error_t dc1394_format7_get_frame_interval(dc1394camera_t *, dc1394video_mode_t, float *) nogil
+    dc1394error_t dc1394_format7_get_total_bytes(dc1394camera_t *, dc1394video_mode_t, unt64_t *) nogil
+    dc1394error_t dc1394_format7_get_pixel_number(dc1394camera_t *, dc1394video_mode_t, unt32_t *) nogil
+    dc1394error_t dc1394_format7_set_roi(dc1394camera_t *, dc1394video_mode_t, int, int, int, int, int) nogil
+    dc1394error_t dc1394_format7_get_roi(dc1394camera_t *, dc1394video_mode_t, int *, int *, int *, int *, int *) nogil

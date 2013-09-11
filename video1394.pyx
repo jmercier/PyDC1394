@@ -57,6 +57,15 @@ VIDEO_MODE_1600x1200_MONO8      = DC1394_VIDEO_MODE_1600x1200_MONO8
 VIDEO_MODE_1024x768_MONO16      = DC1394_VIDEO_MODE_1024x768_MONO16
 VIDEO_MODE_800x600_MONO16       = DC1394_VIDEO_MODE_800x600_MONO16
 VIDEO_MODE_640x480_MONO16       = DC1394_VIDEO_MODE_640x480_MONO16
+VIDEO_MODE_EXIF                 = DC1394_VIDEO_MODE_EXIF
+VIDEO_MODE_FORMAT7_0            = DC1394_VIDEO_MODE_FORMAT7_0
+VIDEO_MODE_FORMAT7_1            = DC1394_VIDEO_MODE_FORMAT7_1
+VIDEO_MODE_FORMAT7_2            = DC1394_VIDEO_MODE_FORMAT7_2
+VIDEO_MODE_FORMAT7_3            = DC1394_VIDEO_MODE_FORMAT7_3
+VIDEO_MODE_FORMAT7_4            = DC1394_VIDEO_MODE_FORMAT7_4
+VIDEO_MODE_FORMAT7_5            = DC1394_VIDEO_MODE_FORMAT7_5
+VIDEO_MODE_FORMAT7_6            = DC1394_VIDEO_MODE_FORMAT7_6
+VIDEO_MODE_FORMAT7_7            = DC1394_VIDEO_MODE_FORMAT7_7
 
 
 FRAMERATE_1_875     = DC1394_FRAMERATE_1_875
@@ -68,6 +77,11 @@ FRAMERATE_60        = DC1394_FRAMERATE_60
 FRAMERATE_120       = DC1394_FRAMERATE_120
 FRAMERATE_240       = DC1394_FRAMERATE_240
 
+ISO_SPEED_800    = DC1394_ISO_SPEED_800
+ISO_SPEED_400    = DC1394_ISO_SPEED_400
+
+OPERATION_MODE_1394B    = DC1394_OPERATION_MODE_1394B
+OPERATION_MODE_LEGACY   = DC1394_OPERATION_MODE_LEGACY
 
 
 cdef list DC1394ISOSpeedTable = [
@@ -184,6 +198,7 @@ cdef class DC1394Camera(object):
     cdef dict available_modes
     cdef dict available_features
     cdef dict unavailable_features
+    cdef dict available_modes7
     cdef bint stop_event
 
 
@@ -191,6 +206,13 @@ cdef class DC1394Camera(object):
     def __dealloc__(self):
         dc1394_camera_free(self.cam)
 
+    def set1394B(self):
+        self.operationMode = DC1394_OPERATION_MODE_1394B
+        self.isoSpeed = DC1394_ISO_SPEED_800
+
+    def set1394A(self):
+        self.operationMode = DC1394_OPERATION_MODE_LEGACY
+        self.isoSpeed = DC1394_ISO_SPEED_400
 
     def __cinit__(self, DC1394Context ctx, uint64_t guid, int unit = -1):
         self.ctx = ctx
@@ -202,26 +224,17 @@ cdef class DC1394Camera(object):
         self.transmission = DC1394_OFF
         self.populate_capabilities()
 
-        try:
-            self.operationMode = DC1394_OPERATION_MODE_1394B
-            self.isoSpeed = DC1394_ISO_SPEED_800
-        except DC1394Error, e:
-            self.operationMode = DC1394_OPERATION_MODE_LEGACY
-            self.isoSpeed = DC1394_ISO_SPEED_400
-
-        self.populate_capabilities()
-
     def setdown(self):
         self.stop_event = True;
 
-    def setup(self):
+    def setup(self, unsigned int nbuffers = 10):
         print ("Starting camera...")
         self.power = True
         if self.transmission is DC1394_ON:
             raise RuntimeError("Camera Already Running")
         self.stop_event = False
 
-        DC1394SafeCall(dc1394_capture_setup(self.cam, 10, DC1394_CAPTURE_FLAGS_DEFAULT))
+        DC1394SafeCall(dc1394_capture_setup(self.cam, nbuffers, DC1394_CAPTURE_FLAGS_DEFAULT))
         self.transmission = DC1394_ON
         cdef dc1394video_frame_t *frame
         cdef dc1394error_t err
@@ -263,8 +276,6 @@ cdef class DC1394Camera(object):
         DC1394SafeCall(dc1394_capture_stop(self.cam))
         self.power = False
         print ("Stopping Camera")
-    
-
 
     cdef void populate_capabilities(self):
         cdef dc1394video_modes_t modes
@@ -274,11 +285,26 @@ cdef class DC1394Camera(object):
         self.available_features = {}
         self.unavailable_features = {}
         self.available_modes = {}
+        self.available_modes7 = {}
 
         DC1394SafeCall(dc1394_video_get_supported_modes(self.cam, &modes))
         for m in [modes.modes[i] for i in xrange(modes.num)]:
-            DC1394SafeCall(dc1394_video_get_supported_framerates (self.cam, m, &framerates))
-            self.available_modes[m] = [framerates.framerates[j] for j in xrange(framerates.num)]
+            try:
+                DC1394SafeCall(dc1394_video_get_supported_framerates (self.cam, m, &framerates))
+                self.available_modes[m] = [framerates.framerates[j] for j in xrange(framerates.num)]
+            except:
+                pass
+
+
+        cdef unsigned int h_size, v_size
+        cdef float interval
+        for m in range(DC1394_VIDEO_MODE_FORMAT7_0, DC1394_VIDEO_MODE_FORMAT7_7):
+            dc1394_format7_get_max_image_size(self.cam, m, &h_size, &v_size)
+            print v_size, h_size
+            dc1394_format7_get_unit_size(self.cam, m, &h_size, &v_size)
+            print v_size, h_size
+            dc1394_format7_get_frame_interval(self.cam, m, &interval)
+            print interval
 
         cdef dc1394featureset_t featureset
         DC1394SafeCall(dc1394_feature_get_all(self.cam, &featureset))

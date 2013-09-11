@@ -1,5 +1,4 @@
-import pygame
-pygame.init()
+import cv, cv2
 
 import video1394
 import numpy as np
@@ -10,40 +9,55 @@ from pylab import *
 import time
 import sys
 
-
-size = width, height = 480, 640
-screen = pygame.display.set_mode(size)
+cv2.namedWindow("Meh")
+cv2.namedWindow("Meh2")
 
 i = 0
-
 def test(im, timestamp):
     global i
     sys.stderr.write("grab %d %d \r" % (i, timestamp))
-    i += 1
-    try:
-        py_img = pygame.image.frombuffer(im.T.copy(), im.shape, "RGB")
-        screen.blit(py_img, py_img.get_rect())
-        pygame.display.flip()
-    except (Exception, e):
-        print e
+    cv2.imshow("Meh", im )
+    cv2.waitKey(1)
+
+def test2(im, timestamp):
+    global i
+    sys.stderr.write("grab %d %d \r" % (i, timestamp))
+    cv2.imshow("Meh2", im )
+    cv2.waitKey(1)
+
+def testc(event, posx, posy, flag, self):
+    print event, posx, posy, flag, self
+    pass
+
+cv2.setMouseCallback("Meh", testc)
 
 ctx = video1394.DC1394Context()
-camera = ctx.createCamera(0)
-camera.resetBus()
-camera.mode = video1394.VIDEO_MODE_640x480_RGB8
-camera.framerate = video1394.FRAMERATE_15
-camera.print_info()
-gen = camera.setup()
+cameras = []
+gens = []
+for i in range(1,2):
+    camera = ctx.createCamera(i)
+    camera.resetBus()
+    camera.set1394A()
+    camera.mode = video1394.VIDEO_MODE_640x480_MONO8
+    camera.framerate = video1394.FRAMERATE_60
+    camera.print_info()
+    gen = camera.setup()
+    gens.append(gen)
+    cameras.append(camera)
+
+
 import time
 def onstop(*args):
-    camera.setdown()
-    for f in gen:
-        print f
+    for c in cameras:
+        c.setdown()
     time.sleep(1)
 
-for f in gen:
-    test(*f)
 
 import signal
 signal.signal(signal.SIGINT, onstop)
+
+while True:
+    f1 = next(gens[0])
+    test(*f1)
+
 
