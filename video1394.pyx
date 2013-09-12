@@ -106,17 +106,17 @@ cdef list DC1394ISOSpeedTable = [
 
 
 cdef dict DC1394NumpyColorCoding = {
-                        DC1394_COLOR_CODING_MONO8       : np.uint8(),
-                        DC1394_COLOR_CODING_YUV411      : np.uint8(),
-                        DC1394_COLOR_CODING_YUV422      : np.uint8(),
-                        DC1394_COLOR_CODING_YUV444      : np.uint8(),
-                        DC1394_COLOR_CODING_RGB8        : np.dtype([("R", np.uint8), ("G", np.uint8), ("B", np.uint8)]),
-                        DC1394_COLOR_CODING_MONO16      : np.uint16(),
-                        DC1394_COLOR_CODING_RGB16       : np.dtype([("R", np.uint16), ("G", np.uint16), ("B", np.uint16)]),
-                        DC1394_COLOR_CODING_MONO16S     : np.int16(),
-                        DC1394_COLOR_CODING_RGB16S      : np.int16(),
-                        DC1394_COLOR_CODING_RAW8        : np.uint8(),
-                        DC1394_COLOR_CODING_RAW16       : np.uint16(),
+                        DC1394_COLOR_CODING_MONO8       : (1, np.uint8()),
+                        DC1394_COLOR_CODING_YUV411      : (1, np.uint8()),
+                        DC1394_COLOR_CODING_YUV422      : (1, np.uint8()),
+                        DC1394_COLOR_CODING_YUV444      : (1, np.uint8()),
+                        DC1394_COLOR_CODING_RGB8        : (3, np.uint8()),
+                        DC1394_COLOR_CODING_MONO16      : (1, np.uint16()),
+                        DC1394_COLOR_CODING_RGB16       : (3, np.uint16()),
+                        DC1394_COLOR_CODING_MONO16S     : (1, np.int16()),
+                        DC1394_COLOR_CODING_RGB16S      : (3, np.int16()),
+                        DC1394_COLOR_CODING_RAW8        : (1, np.uint8()),
+                        DC1394_COLOR_CODING_RAW16       : (1, np.uint16()),
 }
 
 cdef dict DC1394NumpyColorCoding2 = {
@@ -265,17 +265,19 @@ cdef class DC1394Camera(object):
         cdef dc1394video_frame_t *frame
         cdef dc1394error_t err
 
-        dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_WAIT, &frame)
+        cdef dc1394video_mode_t current_mode = self.mode
+        cdef dc1394color_coding_t color_coding
+        DC1394SafeCall(dc1394_get_color_coding_from_video_mode(self.cam, current_mode, &color_coding))
+        depth, dtype = DC1394NumpyColorCoding[color_coding]
 
-        dtype = DC1394NumpyColorCoding[frame.color_coding]
+        cdef unsigned int width, height
+        DC1394SafeCall(dc1394_get_image_size_from_video_mode(self.cam, current_mode, &width, &height))
 
-        cdef np.ndarray arr = np.ndarray(shape=(frame.size[1], frame.size[0], dtype.itemsize) , dtype=np.uint8 )
-        cdef object nparr = arr
+        cdef np.ndarray arr = np.ndarray(shape=(1,1,depth) , dtype=dtype )
         cdef char *orig_ptr = arr.data
-        cdef np.dtype orig_dtype = arr.dtype
-        arr.dtype = dtype
-        arr.strides[0] = frame.stride
-        nparr.shape = (frame.size[1], frame.size[0])
+
+        arr.shape[0] = height
+        arr.shape[1] = width
 
         selectlist = [self.fileno]
         try:
@@ -289,25 +291,18 @@ cdef class DC1394Camera(object):
                     continue
 
                 arr.data = <char *>frame.image
-                print arr.strides[0], arr.strides[1], arr.strides[2]
-                print arr.shape[0], arr.shape[1]
-                print frame.size[0], frame.size[1], frame.stride, frame.total_bytes
-                if frame.size[0] * frame.size[1] > frame.total_bytes:
-                    print "Something went wrong"
-                    raise RuntimeError("Something went terribly wrong")
+                arr.strides[0] = frame.stride
                 yield arr, frame.timestamp
                 dc1394_capture_enqueue(self.cam, frame)
         except:
             pass
+        finally:
+            arr.data = orig_ptr
 
-
-        arr.data = orig_ptr
-        arr.dtype = orig_dtype
-
-        self.transmission = DC1394_OFF
-        DC1394SafeCall(dc1394_capture_stop(self.cam))
-        self.power = False
-        print ("Stopping Camera")
+            self.transmission = DC1394_OFF
+            dc1394_capture_stop(self.cam)
+            self.power = False
+            print ("Stopping Camera")
 
     cdef void populate_capabilities(self):
         cdef dc1394video_modes_t modes
@@ -332,10 +327,13 @@ cdef class DC1394Camera(object):
         cdef float interval
         cdef dc1394format7mode_t info
         for m in range(DC1394_VIDEO_MODE_FORMAT7_0, DC1394_VIDEO_MODE_FORMAT7_7):
-            dc1394_format7_get_mode_info(self.cam, m, &info)
-            print info.present, info.size_x, info.max_size_x, info.size_y,info.max_size_y, info.total_bytes
-            for i in xrange(info.color_codings.num):
-                print color_coding[info.color_codings.codings[i]]
+            try:
+                DC1394SafeCall(dc1394_format7_get_mode_info(self.cam, m, &info))
+                print info.present, info.size_x, info.max_size_x, info.size_y,info.max_size_y, info.total_bytes
+                for i in xrange(info.color_codings.num):
+                    print color_coding[info.color_codings.codings[i]]
+            except:
+                pass
 
 
         cdef dc1394featureset_t featureset

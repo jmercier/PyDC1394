@@ -485,3 +485,6 @@ cdef extern from "dc1394/dc1394.h":
     dc1394error_t dc1394_format7_get_packet_size(dc1394camera_t *, dc1394video_mode_t, uint32_t *) nogil
 
     dc1394error_t dc1394_format7_get_mode_info(dc1394camera_t *, dc1394video_mode_t, dc1394format7mode_t *info) nogil
+
+    dc1394error_t dc1394_get_color_coding_from_video_mode(dc1394camera_t *, dc1394video_mode_t, dc1394color_coding_t*) nogil
+    dc1394error_t dc1394_get_image_size_from_video_mode(dc1394camera_t *, dc1394video_mode_t, uint32_t *, uint32_t *) nogil
