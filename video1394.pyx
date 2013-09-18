@@ -263,7 +263,6 @@ cdef class DC1394Camera(object):
         DC1394SafeCall(dc1394_capture_setup(self.cam, nbuffers, DC1394_CAPTURE_FLAGS_DEFAULT))
         self.transmission = DC1394_ON
         cdef dc1394video_frame_t *frame
-        cdef dc1394error_t err
 
         cdef dc1394video_mode_t current_mode = self.mode
         cdef dc1394color_coding_t color_coding
@@ -285,10 +284,7 @@ cdef class DC1394Camera(object):
                 rlist, wlist, xlist = select.select(selectlist, [], [], 1)
                 if len(rlist) == 0:
                     continue
-
-                err = dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_POLL, &frame)
-                if err != DC1394_SUCCESS:
-                    continue
+                dc1394_capture_dequeue(self.cam, DC1394_CAPTURE_POLICY_POLL, &frame)
 
                 arr.data = <char *>frame.image
                 arr.strides[0] = frame.stride
